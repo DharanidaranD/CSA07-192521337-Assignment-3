@@ -1,0 +1,38 @@
+Q1 - Which Socket Gets the Segment? (Work Out, Conclusion & Alternative Concept Analysis)
+===========================================================================================
+
+1. Work Out
+-----------
+a) Socket Routing (Demultiplexing):
+- TCP from 49.37.2.8:50001 to port 443 -> Routed to socket: TCP 203.0.113.5:443 <-> 49.37.2.8:50001 ESTABLISHED.
+- TCP from 117.96.4.2:50000 to port 443 -> Routed to socket: TCP 203.0.113.5:443 <-> 117.96.4.2:50000 ESTABLISHED.
+- TCP SYN from 106.51.7.7:41000 to port 443 -> Routed to welcoming socket: TCP 203.0.113.5:443 LISTEN to begin a new 3-way handshake.
+- UDP from 49.37.2.8:50000 to port 5004 -> Routed to single shared socket: UDP 203.0.113.5:5004.
+
+b) TCP vs. UDP Demultiplexing:
+- TCP sockets are identified by a 4-tuple: (Source IP, Source Port, Destination IP, Destination Port). Even when two clients both pick source port 50000, their Source IPs (49.37.2.8 vs. 117.96.4.2) differ, producing two distinct 4-tuples and two separate OS sockets.
+- UDP sockets are identified by a 2-tuple: (Destination IP, Destination Port). All datagrams sent to 203.0.113.5:5004 enter the single UDP socket buffer; the application uses recvfrom() to inspect each sender's (IP, port) tuple.
+
+c) Header Overhead Calculation (100-byte payload over IPv4):
+- IPv4 Header = 20 bytes.
+- UDP: 20 (IPv4) + 8 (UDP) = 28 bytes header. Total packet = 128 bytes.
+  Overhead = (28 / 128) * 100 = 21.88%.
+- TCP: 20 (IPv4) + 20 (TCP) = 40 bytes header. Total packet = 140 bytes.
+  Overhead = (40 / 140) * 100 = 28.57%.
+
+d) Protocol Choice per Feature:
+- Live Scores -> TCP: Must arrive reliably without corrupted or skipped digits; low update frequency makes TCP overhead negligible.
+- Ball-by-Ball Commentary -> TCP: Text events must appear in strict chronological order with zero missing balls.
+- Live Video -> UDP: Real-time media cannot wait for retransmissions; stale retransmitted frames arrive past their playout deadline and stall playback.
+
+2. Conclusion
+-------------
+Although UDP lacks built-in retransmissions, TCP achieves reliability by pausing delivery in the kernel receive buffer until lost segments are retransmitted (head-of-line blocking). For live video or voice calls, stalling playback for 60+ ms to recover one lost packet creates noticeable freezes, whereas UDP skips the lost frame and plays incoming frames immediately with lower header overhead (21.88% vs. 28.57%).
+
+3. Alternative Concept Analysis (Live Video over TCP at 2% Loss, 60 ms RTT, 500 pkt/s)
+--------------------------------------------------------------------------------------
+- Freeze duration per lost segment: At least 1 RTT = 60 ms (via fast retransmit after 3 duplicate ACKs), or 200 ms to 1,000 ms if a retransmission timeout (RTO) occurs.
+- Freezes per minute:
+  Total packets/min = 500 pkt/s * 60 s = 30,000 packets.
+  Lost packets/min = 30,000 * 0.02 = 600 freezes per minute (10 freezes per second).
+  Playback freezes continuously and becomes unwatchable.
