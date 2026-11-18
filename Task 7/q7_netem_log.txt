@@ -1,0 +1,95 @@
+========================================================================
+Q7 – Choose the Protocols from First Principles (Design & Analysis)
+========================================================================
+
+Stage 1 – Interpret the Problem (2 Marks)
+-----------------------------------------
+Traffic Requirements Matrix:
+1. Live Video Consultation:
+   - Delay Sensitivity: Ultra-low (< 150 ms one-way latency, < 30 ms jitter)
+   - Loss Tolerance: Tolerates up to 5% packet loss with FEC/PLC
+   - Ordering: Playout timestamp order only (no retransmission stalls)
+   - Security: End-to-end encrypted (SRTP / DTLS)
+
+2. X-Ray Images & Electronic Health Records (EHR):
+   - Delay Sensitivity: Moderate (< 15 s for a 10-15 MB DICOM study)
+   - Loss Tolerance: Zero loss (100% bit-exact integrity via SHA-256)
+   - Ordering: Strict byte-stream ordering
+   - Security: Encrypted in transit (TLS 1.3, HIPAA/DISHA compliant)
+
+3. Doctor-Nurse Clinical Chat:
+   - Delay Sensitivity: Low (< 500 ms delivery)
+   - Loss Tolerance: Zero loss
+   - Ordering: Strict message sequence order
+   - Security: Encrypted in transit (TLS 1.3)
+
+4. Service Lookup (DNS):
+   - Delay Sensitivity: Very low (< 100 ms cached lookup)
+   - Loss Tolerance: Retries on timeout
+   - Ordering: Single request/response transaction
+   - Security: DNSSEC / DNS-over-HTTPS (DoH)
+
+Stage 2 – Compare Candidate Protocols (3 Marks)
+-----------------------------------------------
+* Protocol Architecture Mapping:
+  - Live Video: UDP + RTP/SRTP (WebRTC). Eliminates TCP handshake overhead
+    and head-of-line (HoL) blocking under 5% 4G packet loss.
+  - X-Ray & Patient Records: HTTP/3 over QUIC (with TLS 1.3). Multiplexes
+    concurrent image uploads without cross-stream HoL blocking and uses
+    modern congestion control (BBR) to sustain throughput on lossy 4G links.
+  - Clinical Chat: QUIC streams / WebSockets over TLS 1.3. Guarantees
+    reliable, ordered message delivery with 0-RTT/1-RTT reconnection when
+    4G signal fluctuates.
+
+* Unscaled TCP Throughput Limit (W = 64 KB, RTT = 300 ms):
+  - Window size W = 64 KB = 65,536 bytes = 524,288 bits.
+  - Max Throughput = W / RTT = 524,288 bits / 0.300 s = 1,747,627 bps
+    ~= 1.75 Mbps.
+  - Impact on X-Ray Transfers: A 15 MB (120 Mb) chest X-ray requires at
+    least 120 Mb / 1.75 Mbps ~= 68.6 seconds over an unscaled 64 KB TCP
+    window, plus severe throughput collapse at 5% loss. Enabling TCP Window
+    Scaling (RFC 7323) or using QUIC is mandatory.
+
+* Clinic DNS & DiffServ QoS Configuration:
+  - DNS: Deploy a local caching DNS forwarder at each rural clinic
+    (TTL = 300 s) with DoH upstream fallback to survive transient WAN drops.
+  - QoS: Configure DiffServ EF (strict priority) for live video/audio,
+    AF41 for clinical chat, and AF21 (token-bucket shaped) for background
+    X-ray uploads so bulk transfers never starve live consultations.
+
+Stage 3 – Implement and Verify (3 Marks)
+----------------------------------------
+* Verification Summary (`q7_telehealth.py`):
+  - Verified ordered message delivery and acknowledgment for clinical chat
+    ("Patient vitals stable.") over TCP loopback sockets.
+  - Verified complete, byte-accurate transfer of a 500,000-byte (500 KB)
+    simulated X-ray payload (`Server verified 500000 bytes of X-ray data.`).
+  - Linux 4G impairment test command (optional):
+    `sudo tc qdisc add dev lo root netem delay 200ms 50ms loss 5%`
+    (Remove after testing with `sudo tc qdisc del dev lo root`).
+
+Stage 4 – Defend the Design & Alternative Concept Analysis (2 Marks)
+--------------------------------------------------------------------
+* Design Justification:
+  - Separating real-time media (UDP/SRTP) from bulk medical files
+    (HTTP/3 over QUIC) prevents X-ray uploads from freezing live video
+    while overcoming the 1.75 Mbps unscaled TCP window bottleneck.
+
+* Impact of Upgrading Rural Clinics from 4G to 5G:
+  - RTT drops from 100-300 ms down to 10-20 ms, and packet loss falls
+    below 0.1%.
+  - High-bitrate 4K diagnostic video becomes practical, 15 MB X-rays finish
+    transferring in under 1 second, and Forward Error Correction (FEC)
+    redundancy overhead can be reduced to save bandwidth.
+
+* Alternative Concept Analysis (Commercial Telehealth Vendor Service):
+  - Three Critical Technical Questions Before Signing:
+    1. Does the platform support adaptive bitrate (ABR) and WebRTC FEC
+       tuned for 300 ms RTT and 5% packet loss on rural 4G links?
+    2. Are video, chat, and DICOM files end-to-end encrypted (E2EE) with
+       zero third-party data retention to satisfy healthcare privacy laws?
+    3. Are media relay (TURN) and edge servers hosted regionally in India
+       to avoid international routing latency?
+  - Decision Criteria: Adopt the commercial vendor only if SLA benchmarks
+    demonstrate < 150 ms glass-to-glass latency under 5% simulated loss and
+    a signed Business Associate Agreement (BAA) guarantees patient privacy.
