@@ -1,0 +1,6 @@
+load  500 pkt/s: rho 0.50 L    1.0 pkts W    2.0 ms
+load  800 pkt/s: rho 0.80 L    4.0 pkts W    5.0 ms
+load  900 pkt/s: rho 0.90 L    9.0 pkts W   10.0 ms
+load  950 pkt/s: rho 0.95 L   19.0 pkts W   20.0 ms
+load  990 pkt/s: rho 0.99 L   99.0 pkts W  100.0 ms
+load 1000 pkt/s: unstable, queue grows without limit
