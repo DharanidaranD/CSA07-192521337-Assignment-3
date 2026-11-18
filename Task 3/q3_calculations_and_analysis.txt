@@ -1,59 +1,101 @@
 ================================================================================
-Q3 - WHY DOES THE HOME PAGE TAKE 8 SECONDS? (CALCULATIONS & ANALYSIS)
+CSA07 – COMPUTER NETWORKS (ASSIGNMENT 3 – CO3)
+Q3 – Why Does the Home Page Take 8 Seconds? (7 Marks)
 ================================================================================
 
-1. WORK OUT (RTT = 50 ms, 1 Base HTML + 80 Embedded Objects = 81 Total Files)
+1. WORK OUT & STEP-BY-STEP CALCULATIONS
+Given Parameters:
+- Round-Trip Time (RTT) = 50 ms
+- Base HTML file = 1 object
+- Embedded objects = 80 objects
+- Total files to fetch = 1 + 80 = 81 files
+- Assumptions: Negligible transmission time (file size / link rate ≈ 0) and zero server processing delay.
+
 --------------------------------------------------------------------------------
-(a) Non-Persistent HTTP (1 TCP connection at a time):
-    - Each file requires 1 RTT for the TCP 3-way handshake + 1 RTT for HTTP
-      request/response = 2 RTT per object.
-    - Total Time = 81 files * 2 RTT = 162 RTT
-    - In milliseconds = 162 * 50 ms = 8,100 ms (8.10 seconds)
-
-(b) Persistent HTTP/1.1 (Single reused TCP connection):
-    - Without Pipelining:
-      * 1 RTT (initial TCP handshake) + 81 * 1 RTT (sequential object fetches)
-      * Total Time = 82 RTT = 82 * 50 ms = 4,100 ms (4.10 seconds)
-    - With Pipelining:
-      * 1 RTT (handshake) + 1 RTT (HTML) + 1 RTT (all 80 requests pipelined)
-      * Total Time = 3 RTT = 3 * 50 ms = 150 ms (0.15 seconds)
-
-(c) 6 Parallel Non-Persistent Connections:
-    - Base HTML file = 2 RTT.
-    - Remaining 80 objects across 6 parallel connections = ceil(80 / 6) = 14 rounds.
-    - Each round of non-persistent fetches takes 2 RTT -> 14 * 2 RTT = 28 RTT.
-    - Total Time = (2 + 28) RTT = 30 RTT = 30 * 50 ms = 1,500 ms (1.50 seconds)
-
-(d) HTTP/2 vs. HTTP/3 Head-of-Line (HoL) Blocking:
-    - HTTP/2: Multiplexes multiple logical streams over a SINGLE TCP connection.
-      If one TCP segment is lost, the OS kernel holds all subsequent segments in
-      the TCP receive buffer until retransmission arrives, stalling all streams.
-    - HTTP/3 (over QUIC/UDP): Runs independent streams in user space; a lost
-      packet in Stream A pauses only Stream A while Streams B and C continue.
-
-(e) Caching Headers on Repeat Visits:
-    - Cache-Control: max-age=86400, immutable
-      Eliminates all network round trips for static assets (0 ms network delay;
-      page loads from local disk/memory cache in < 50 ms, saving ~8.05 s).
-    - ETag / If-None-Match:
-      Sends a conditional request (1 RTT for HTTP 304 Not Modified), avoiding
-      re-downloading unchanged file payloads.
-
-2. ENGINEERING DECISION (RANKED CHANGES FOR MOBILE NETWORKS)
+(a) Non-Persistent HTTP (1 TCP connection at a time)
 --------------------------------------------------------------------------------
-1. Strong Cache-Control Headers: Cuts repeat-visit load time by ~99% to 0 RTT.
-2. Upgrade to HTTP/3 (QUIC): Reduces handshake RTTs and eliminates TCP HoL
-   blocking on lossy 4G/5G cellular networks.
-3. Asset Bundling & Compression: Reduces total HTTP object count and payload size.
+- Each object requires:
+  * 1 RTT for TCP three-way handshake (SYN / SYN-ACK / ACK)
+  * 1 RTT for HTTP Request + HTTP Response
+  * Total per object = 2 RTT
+- Total time for 81 objects:
+  Total RTTs = 81 * 2 = 162 RTT
+  Total Time = 162 * 50 ms = 8,100 ms (8.1 seconds)
+- Conclusion: This explains the ~8-second home page load time observed by users.
 
-3. ALTERNATIVE CONCEPT ANALYSIS (BUNDLING 80 OBJECTS INTO 8 BUNDLES = 9 FILES)
 --------------------------------------------------------------------------------
-- Total files reduced from 81 (1 HTML + 80 objects) to 9 (1 HTML + 8 bundles).
-- Non-Persistent HTTP (sequential):
-  9 files * 2 RTT = 18 RTT = 18 * 50 ms = 900 ms (down from 8,100 ms; 88.9% faster).
-- Persistent HTTP/1.1 (without pipelining):
-  1 RTT + 9 RTT = 10 RTT = 10 * 50 ms = 500 ms (down from 4,100 ms; 87.8% faster).
-- Comparison with HTTP/2 Multiplexing:
-  HTTP/2 achieves ~150-200 ms over a single connection WITHOUT bundling, and
-  avoids cache invalidation penalties (under bundling, changing 1 line of CSS
-  forces clients to re-download the entire bundle).
+(b) Persistent HTTP/1.1 (Without Pipelining vs. With Pipelining)
+--------------------------------------------------------------------------------
+1. Without Pipelining (sequential requests over one reused TCP connection):
+   - Initial TCP handshake = 1 RTT
+   - Base HTML request/response = 1 RTT
+   - 80 embedded objects requested sequentially (1 per RTT) = 80 RTT
+   - Total RTTs = 1 + 1 + 80 = 82 RTT
+   - Total Time = 82 * 50 ms = 4,100 ms (4.1 seconds)
+
+2. With Pipelining (all 80 object requests sent back-to-back in a single batch):
+   - Initial TCP handshake = 1 RTT
+   - Base HTML request/response = 1 RTT
+   - All 80 pipelined requests sent together, responses return in 1 RTT = 1 RTT
+   - Total RTTs = 1 + 1 + 1 = 3 RTT
+   - Total Time = 3 * 50 ms = 150 ms (0.15 seconds)
+
+--------------------------------------------------------------------------------
+(c) 6 Parallel Non-Persistent TCP Connections
+--------------------------------------------------------------------------------
+- Step 1: Fetch base HTML file over 1 connection = 2 RTT
+- Step 2: Fetch remaining 80 objects across 6 parallel connections:
+  * Number of parallel batches = ceil(80 / 6) = ceil(13.33) = 14 batches
+  * Each batch establishes new TCP connections (1 RTT) + fetches objects (1 RTT) = 2 RTT per batch
+  * Time for 80 objects = 14 * 2 RTT = 28 RTT
+- Total RTTs = 2 + 28 = 30 RTT
+- Total Time = 30 * 50 ms = 1,500 ms (1.5 seconds)
+
+--------------------------------------------------------------------------------
+(d) HTTP/2 vs. HTTP/3 Head-of-Line (HoL) Blocking
+--------------------------------------------------------------------------------
+- HTTP/2 (over a single TCP connection):
+  * HTTP/2 solves application-layer HoL blocking by multiplexing multiple streams into binary frames over one TCP connection.
+  * However, transport-layer TCP HoL blocking still occurs: if a single TCP segment carrying Stream 1 is lost, the OS kernel TCP receive buffer holds all subsequent segments (even those belonging to Streams 2, 3, and 4) until the lost segment is retransmitted and received in order.
+- HTTP/3 (over QUIC / UDP):
+  * QUIC implements stream multiplexing directly in user space over UDP.
+  * Each stream has independent sequence tracking and delivery buffers. If a packet carrying Stream 1 is lost, only Stream 1 pauses for retransmission while Streams 2, 3, and 4 continue delivering data to the browser immediately.
+
+--------------------------------------------------------------------------------
+(e) Caching Headers on a Second Visit
+--------------------------------------------------------------------------------
+- Cache-Control: max-age=86400, immutable
+  * Tells the browser that static assets (CSS, JS, images) remain fresh for 86,400 seconds (24 hours) and will not change during that window.
+  * On a second visit, the browser loads all 80 cached objects directly from local disk/memory cache with 0 network RTTs. Only the HTML document (if uncached) takes 1–2 RTTs (50–100 ms), saving ~8.0 seconds.
+- ETag / If-None-Match:
+  * Assigns a content hash (e.g., ETag: "a1b2c3d4") to each resource.
+  * When max-age expires, the browser sends a conditional GET with If-None-Match: "a1b2c3d4". If unchanged, the server replies with "304 Not Modified" (1 RTT, empty body), avoiding full payload re-downloads.
+
+================================================================================
+2. ENGINEERING DECISION (MOBILE NETWORKS)
+================================================================================
+Ranked Changes to Deploy First:
+1. Strong Cache-Control Headers (max-age + immutable + content-hashed filenames):
+   - Highest impact at near-zero engineering cost; eliminates ~99% of network round trips on repeat visits.
+2. Upgrade Server & CDN to HTTP/3 (QUIC):
+   - Eliminates TCP+TLS multi-RTT handshakes (0-RTT/1-RTT setup) and prevents transport-layer HoL blocking on lossy 4G/5G cellular connections.
+3. Asset Bundling & Compression (Brotli / Gzip + WebP/AVIF):
+   - Reduces total byte volume and file count, accelerating first-time cold visits over bandwidth-constrained mobile links.
+
+================================================================================
+3. ALTERNATIVE CONCEPT ANALYSIS (BUNDLING 80 OBJECTS INTO 8 BUNDLES)
+================================================================================
+Scenario: 80 embedded objects are combined into 8 asset bundles + 1 HTML = 9 total files.
+
+1. Non-Persistent HTTP (9 files):
+   - Total RTTs = 9 * 2 RTT = 18 RTT
+   - Total Time = 18 * 50 ms = 900 ms (0.9 seconds) -> 9x faster than 8,100 ms.
+
+2. Persistent HTTP/1.1 without Pipelining (9 files):
+   - Total RTTs = 1 RTT (TCP handshake) + 9 RTT (sequential requests) = 10 RTT
+   - Total Time = 10 * 50 ms = 500 ms (0.5 seconds) -> 8.2x faster than 4,100 ms.
+
+3. Comparison with HTTP/2 Multiplexing (without bundling):
+   - HTTP/2 fetches all 80 separate files concurrently over 1 TCP connection in ~3 RTT (150 ms), outperforming 8-bundle HTTP/1.1 (500–900 ms).
+   - Cache Invalidation Trade-off: With 8 large bundles, changing a single 1 KB CSS rule forces users to re-download an entire multi-hundred-kilobyte bundle. With HTTP/2, individual files keep granular cache lifetimes without sacrificing parallel load speed.
+================================================================================
