@@ -1,3 +1,0 @@
-results.simats.ac.in.    10.20.30.40     queries sent: 4
-www.example.com.         93.184.216.34   queries sent: 3
-results.simats.ac.in.    10.20.30.40     queries sent: 0
