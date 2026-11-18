@@ -1,12 +1,12 @@
 # CSA07 – Computer Networks: Assignment 3 (CO3)
 
-* **Name:** [Your Full Name]
+* **Name:** DHARANIDARAN D
 * **Register Number:** 192521337
-* **Operating System:** [e.g., Windows 11 / Ubuntu 22.04]
-* **Python Version:** [e.g., Python 3.11]
-* **Packet Tracer Version:** Not applicable (Python 3 & analytical tasks only)
+* **Operating System:** [WiWindows1 / Ubuntu 22.04]
+* **Python Version:** [Run 3.11]
+* **Packet Tracer Version:** PythPythonyticalhon applicable (Python 3 & analytical tasks only)
 
-## How to Run
+#Runow to Run
 Run any task script from the repository root using Python 3:
 * `python3 Q1/q1_sockets.py`
 * `python3 Q2/q2_cwnd.py`
