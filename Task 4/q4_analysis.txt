@@ -1,0 +1,73 @@
+========================================================================
+Q4 – How Many Queries Reach the University's DNS Server? (Analysis)
+========================================================================
+
+1. Work Out
+-----------
+* Authoritative Queries per Hour from One ISP Resolver:
+  - When TTL = 300 s (5 minutes):
+    3600 s / 300 s = 12 queries/hour.
+  - When TTL = 30 s (0.5 minutes):
+    3600 s / 30 s = 120 queries/hour.
+
+* Why Student Count Hardly Matters:
+  - All students sharing an ISP recursive resolver query that resolver's
+    local cache rather than contacting the university server directly.
+  - Whether 10 or 50,000 students request results.simats.ac.in within a
+    300-second window, the ISP resolver answers from cache after the first
+    lookup, forwarding only 1 query per TTL window per active resolver.
+
+* Recursive vs. Iterative Query Path:
+  - Recursive Query: The student's phone sends a single recursive query
+    to its configured ISP resolver, requesting the final IP address.
+  - Iterative Queries: The ISP resolver performs iterative steps:
+    1. Root Server (.) -> refers to .in TLD server
+    2. .in TLD Server -> refers to .ac.in server
+    3. .ac.in Server -> refers to simats.ac.in authoritative NS
+    4. simats.ac.in Authoritative Server -> returns final A/AAAA record
+
+* Required DNS Records & UDP vs. TCP Transport:
+  - Required Records:
+    * A: Maps results.simats.ac.in to its IPv4 address.
+    * AAAA: Maps results.simats.ac.in to its IPv6 address.
+    * NS: Delegates the zone to authoritative name servers.
+    * CNAME / TXT (Optional): Used if aliasing to a cloud host or verifying
+      domain ownership (MX is only needed if the subdomain receives mail).
+  - UDP vs. TCP (Port 53):
+    * DNS defaults to UDP port 53 because single-packet request/reply
+      exchanges avoid TCP's 3-way handshake overhead.
+    * DNS switches to TCP port 53 when responses exceed standard UDP payload
+      limits (e.g., DNSSEC signatures, large record sets, or zone transfers)
+      to prevent IP fragmentation and spoofing.
+
+* Risk of a Very Long TTL (e.g., 24 hours / 86,400 s):
+  - If the primary result server crashes at midday and traffic must fail
+    over to a backup IP address, ISP resolvers holding a 24-hour cached
+    record will continue routing students to the dead IP for up to 24 hours.
+
+2. Code Cache Behavior
+----------------------
+* Why the third lookup sends 0 queries:
+  - During the first lookup of 'results.simats.ac.in.', the resolved IP
+    ('10.20.30.40') was stored in the local `cache` dictionary.
+  - On the repeat lookup, `name in cache` evaluated to True, returning the
+    cached IP immediately without contacting any DNS server.
+  - Note: Production resolvers store `(ip, expiry_timestamp)` and evict the
+    entry once `time.time() >= expiry_timestamp` to honor the record's TTL.
+
+3. Conclusion & Alternative Concept Analysis
+--------------------------------------------
+* Recommended Result-Day DNS Configuration:
+  - Set TTL = 60 s (or 120 s) backed by at least two geographically
+    redundant authoritative NS servers.
+  - Even with 100 active global ISP resolvers, TTL = 60 s generates only
+    100 queries/minute (~1.7 queries/sec) on the origin DNS server while
+    enabling emergency IP failover within 1 minute.
+
+* Alternative Concept Analysis (CDN with Anycast DNS):
+  - Queries reaching the university's origin DNS server: 0 queries
+    (handled entirely by globally distributed CDN edge name servers).
+  - Lookup latency impact for students in distant cities: Drops from
+    100-300 ms (round-trip to campus) down to 10-25 ms, because Anycast
+    BGP routing directs each student's ISP resolver to the nearest regional
+    Point of Presence (PoP).
