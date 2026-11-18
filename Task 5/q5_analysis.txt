@@ -1,0 +1,67 @@
+========================================================================
+Q5 – When Will the Video Call Freeze? (Analysis)
+========================================================================
+
+1. Work Out (M/M/1 Queue with Service Rate mu = 1,000 pkt/s)
+------------------------------------------------------------
+Formulas:
+  Utilization:            rho = lambda / mu
+  Mean packets in system: L   = rho / (1 - rho)
+  Mean total delay:       W   = 1 / (mu - lambda)
+
+* Calculations across Arrival Rates:
+  - lambda = 500 pkt/s: rho = 0.50 | L =  1.0 pkt  | W =   2.0 ms
+  - lambda = 800 pkt/s: rho = 0.80 | L =  4.0 pkts | W =   5.0 ms
+  - lambda = 900 pkt/s: rho = 0.90 | L =  9.0 pkts | W =  10.0 ms
+  - lambda = 950 pkt/s: rho = 0.95 | L = 19.0 pkts | W =  20.0 ms
+  - lambda = 990 pkt/s: rho = 0.99 | L = 99.0 pkts | W = 100.0 ms
+
+* Load Exceeding 20 ms & Non-Linear Delay Growth:
+  - Total delay W equals 20.0 ms at lambda = 950 pkt/s (rho = 0.95) and
+    exceeds 20 ms for any load > 950 pkt/s.
+  - Doubling load from 450 pkt/s to 900 pkt/s increases total delay W from
+    1.82 ms (1 / 550) to 10.0 ms (1 / 100) — a 5.5x increase (and increases
+    pure queuing delay W_q = rho / (mu - lambda) from 0.82 ms to 9.0 ms, an
+    11x increase).
+  - Reason: Delay is inversely proportional to residual spare capacity
+    (mu - lambda). As arrival rate approaches capacity, spare capacity
+    shrinks from 550 pkt/s to 100 pkt/s, causing queues to build exponentially.
+
+* Token Bucket Maximum Burst Duration:
+  - Given: Bucket depth b = 1 MB = 8 Mb, token rate r = 2 Mbps,
+    peak output link rate R = 10 Mbps.
+  - Burst duration:
+    T_burst = b / (R - r) = 8 Mb / (10 Mbps - 2 Mbps) = 8 / 8 = 1.0 second.
+
+* DiffServ Traffic Classification:
+  - Live Video Calls: EF (Expedited Forwarding) — strict priority queue
+    guaranteeing ultra-low delay and jitter.
+  - Interactive Business Apps: AF (Assured Forwarding) — guaranteed minimum
+    bandwidth share with controlled drop precedence.
+  - Nightly Backups: BE (Best Effort) — lowest priority; absorbs packet
+    drops first during link congestion.
+
+2. Code Capacity Calculation
+----------------------------
+* Required link capacity mu for W < 10 ms (0.01 s) at lambda = 1,500 pkt/s:
+  1 / (mu - 1500) < 0.01
+  mu - 1500 > 100
+  mu > 1,600 packets/second.
+
+3. Engineering Decision & Alternative Concept Analysis
+------------------------------------------------------
+* Engineering Decision (Configure QoS vs. Upgrade Link First):
+  - Configure QoS first. Unscheduled nightly backups or cloud syncs can
+    saturate even an upgraded link during bursts, whereas DiffServ QoS
+    costs $0 and immediately isolates latency-sensitive video packets from
+    bulk transfers.
+
+* Alternative Concept Analysis (Doubling Link to mu = 2,000 pkt/s at lambda = 1,800 pkt/s):
+  - Doubled 2,000 pkt/s link WITHOUT QoS:
+    W = 1 / (2000 - 1800) = 1 / 200 = 5.0 ms average delay across all
+    traffic, still vulnerable to sudden large-packet backup bursts.
+  - Strict Priority QoS on the original 1,000 pkt/s link (assuming 200 pkt/s
+    video traffic):
+    W_video = 1 ms (service time) + ~1 ms (residual non-preemptive frame
+    time) = ~2.0 ms — 2.5x lower latency than doubling the link, at zero
+    hardware upgrade cost.
