@@ -1,0 +1,88 @@
+================================================================================
+CSA07 – COMPUTER NETWORKS (ASSIGNMENT 3 – CO3)
+Q6 – Count the Round Trips Before the First Byte (6 Marks)
+================================================================================
+
+1. WORK OUT & STEP-BY-STEP CALCULATIONS
+Given Parameters:
+- Round-Trip Time (RTT) = 100 ms
+
+--------------------------------------------------------------------------------
+(a) Handshake Time Before the First Application Request Byte Is Sent
+--------------------------------------------------------------------------------
+1. TCP + TLS 1.2:
+   - TCP 3-way handshake (SYN, SYN-ACK, ACK) = 1 RTT
+   - TLS 1.2 handshake (ClientHello/ServerHello + KeyExchange/Finished) = 2 RTT
+   - Total Setup = 1 + 2 = 3 RTT
+   - Time = 3 * 100 ms = 300 ms
+
+2. TCP + TLS 1.3:
+   - TCP 3-way handshake = 1 RTT
+   - TLS 1.3 handshake (combined key share in ClientHello) = 1 RTT
+   - Total Setup = 1 + 1 = 2 RTT
+   - Time = 2 * 100 ms = 200 ms
+
+3. QUIC (First Visit / 1-RTT):
+   - QUIC merges transport and TLS 1.3 cryptographic negotiation into a single exchange.
+   - Total Setup = 1 RTT
+   - Time = 1 * 100 ms = 100 ms
+
+4. QUIC (0-RTT Resumption):
+   - Using a cached session ticket (PSK) from a previous visit, the client sends encrypted HTTP request data in the very first packet flight alongside ClientHello.
+   - Total Setup = 0 RTT
+   - Time = 0 * 100 ms = 0 ms
+
+--------------------------------------------------------------------------------
+(b) 0-RTT Replay Attack Risk & Safe vs. Unsafe Operations
+--------------------------------------------------------------------------------
+- Why Replay Attacks Are Possible:
+  * In 0-RTT, the client encrypts early application data using a cached Pre-Shared Key (PSK) before the server contributes a fresh random nonce.
+  * An on-path attacker can capture the 0-RTT UDP datagram and replay it multiple times to the server, which will decrypt and process it as valid before completing the handshake.
+- Unsafe Operations (Must NEVER use 0-RTT):
+  * Non-idempotent state-changing requests such as fund transfers, UPI/bill payments, beneficiary additions, or password/PIN resets (replaying could transfer money twice).
+- Safe Operations (Permitted over 0-RTT):
+  * Strictly idempotent, read-only requests such as fetching account balances, viewing recent transaction history, or loading branch/ATM locations.
+
+--------------------------------------------------------------------------------
+(c) QUIC Connection Migration (Wi-Fi to 5G Handoff)
+--------------------------------------------------------------------------------
+- Why TCP Breaks:
+  * A TCP socket is bound to a 4-tuple: (Source IP, Source Port, Destination IP, Destination Port).
+  * Switching from home Wi-Fi to 5G mobile data assigns a new client IP address, invalidating the 4-tuple. The server drops packets from the unknown IP (or sends TCP RST), forcing a full teardown and new TCP+TLS handshake.
+- How QUIC Survives:
+  * QUIC decouples connection identity from IP addresses by embedding an explicit, cryptographically negotiated 64-bit Connection ID (CID) in the public packet header.
+  * When the phone switches to 5G, it continues sending packets with the same Destination CID; the bank server validates the new path via a lightweight PATH_CHALLENGE / PATH_RESPONSE frame without interrupting active streams.
+
+--------------------------------------------------------------------------------
+(d) Enterprise Firewalls Blocking UDP & Fallback Strategy
+--------------------------------------------------------------------------------
+- Why Corporate Firewalls Block UDP 443:
+  * Many enterprise firewalls block outbound UDP port 443 by default to prevent UDP-based volumetric DDoS amplification attacks, bypass of legacy deep-packet inspection (DPI) proxies, and unmonitored tunneling.
+- Required Client Fallback Mechanism:
+  * The mobile banking app must implement "Happy Eyeballs" (RFC 8305) protocol racing: initiate QUIC (UDP 443) first, and if no server response arrives within 100–200 ms, automatically fall back to TCP + TLS 1.3 (TCP 443) so corporate users never experience connection hangs.
+
+================================================================================
+2. ENGINEERING CONCLUSION
+================================================================================
+Recommendation:
+- Yes, the bank's mobile app should adopt HTTP/3 over QUIC with automatic Happy Eyeballs fallback to TCP + TLS 1.3.
+- Justification:
+  1. Cuts cold connection startup latency by 50% (100 ms vs. 200 ms) on high-RTT cellular links.
+  2. Eliminates failed transfers and stalled sessions when commuters move between Wi-Fi and 5G networks via Connection ID migration.
+  3. Restricting 0-RTT strictly to idempotent GET endpoints prevents financial replay attacks while maintaining instant dashboard loads.
+
+================================================================================
+3. ALTERNATIVE CONCEPT ANALYSIS (WI-FI TO 5G SWITCH MID-TRANSFER AT RTT = 100 MS)
+================================================================================
+Scenario: Client switches from Wi-Fi to 5G mid-transfer on a network with RTT = 100 ms.
+
+1. TCP + TLS 1.3 Behavior:
+   - Failure detection: Client OS detects interface change or waits for TCP Retransmission Timeout (RTO, typically 300–1,000 ms).
+   - Re-establishment: Opens new TCP socket (1 RTT = 100 ms) + TLS 1.3 PSK resumption (1 RTT = 100 ms) + HTTP Range request to resume transfer (1 RTT = 100 ms).
+   - Total Interruption Penalty: At least 300 ms of handshake/request overhead plus 300–1,000 ms of timeout detection (~600–1,300 ms total stall), risking app-level transaction errors.
+
+2. QUIC Behavior:
+   - Seamless Migration: Client immediately transmits remaining stream frames over 5G using the existing Connection ID (0 ms session setup delay).
+   - Path Validation: Server verifies the new 5G IP address in the background using PATH_CHALLENGE / PATH_RESPONSE (1 RTT = 100 ms) concurrently with data transfer.
+   - Total Interruption Penalty: 0 ms of connection re-establishment overhead and zero dropped transactions.
+================================================================================
