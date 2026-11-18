@@ -1,0 +1,35 @@
+Q2 - Read the Congestion Window (Work Out, Conclusion & Alternative Concept Analysis)
+======================================================================================
+
+1. Work Out
+-----------
+a) ssthresh Transitions:
+- Initial ssthresh = 16 segments (cwnd doubles from 1 -> 2 -> 4 -> 8 -> 16 in RTTs 1-5, then grows linearly by +1 at RTT 6).
+- After RTT 8 loss (cwnd = 19): ssthresh = floor(19 / 2) = 9 segments.
+- After RTT 14 loss (cwnd = 14): ssthresh = floor(14 / 2) = 7 segments.
+
+b) Loss Event Identification:
+- RTT 8 (Triple Duplicate ACKs / Fast Retransmit): cwnd drops to 9 (ssthresh) rather than 1, showing that subsequent ACKs kept arriving and triggered Fast Recovery.
+- RTT 14 (Retransmission Timeout / RTO): cwnd collapses to 1 segment and re-enters Slow Start (1 -> 2 -> 4), proving no ACKs returned before the timeout expired.
+
+c) Sender Variant:
+- TCP Reno. TCP Tahoe resets cwnd to 1 on every loss event, whereas TCP Reno halves cwnd to ssthresh (9) on triple duplicate ACKs (RTT 9) and only drops to 1 on a timeout (RTT 15).
+
+d) Throughput at RTT 7 (cwnd = 18, MSS = 1460 bytes, RTT = 40 ms):
+- Bytes in flight = 18 * 1460 = 26,280 bytes = 210,240 bits.
+- Throughput = 210,240 bits / 0.040 s = 5,256,000 bps = 5.26 Mbps.
+
+e) AIMD Fairness:
+- During Congestion Avoidance, competing flows increase additively (+1 MSS/RTT, moving at a 45-degree slope toward full utilization) and decrease multiplicatively (x0.5, moving along a ray toward the origin) when congestion occurs. Repeated cycles converge onto the equal-share fairness line (x1 = x2).
+
+f) Code Output Observation:
+- TCP Reno delivers 211 segments vs. TCP Tahoe's 144 segments (+67 extra segments, or +46.5% higher throughput).
+
+2. Conclusion (CUBIC vs. BBR for Hostel Wi-Fi)
+----------------------------------------------
+Use BBR. Hostel Wi-Fi experiences random wireless packet loss and deep router queues (bufferbloat). CUBIC treats random wireless loss as congestion and cuts its window, whereas BBR paces packets according to estimated bottleneck bandwidth and minimum RTT, avoiding bufferbloat and keeping latency low.
+
+3. Alternative Concept Analysis (1% Random Packet Loss)
+-------------------------------------------------------
+- TCP Reno: Treats every 1% random loss as congestion and repeatedly halves cwnd. By the Mathis formula (Throughput ~= 1.22 * MSS / (RTT * sqrt(p))), throughput drops to ~12.2 MSS/RTT.
+- BBR: Does not halve its sending rate on isolated 1% packet loss unless delivery rate drops or RTT inflates, maintaining near-100% link utilization and significantly higher throughput.
