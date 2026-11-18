@@ -2,7 +2,7 @@
 
 * **Name:** DHARANIDARAN D
 * **Register Number:** 192521337
-* **Operating System:** [WiWindows1 / Ubuntu 22.04]
+* **Operating System:** [WiWindows1 / Ubuntu 22.04)
 * **Python Version:** [Run 3.11]
 * **Packet Tracer Version:** PythPythonyticalhon applicable (Python 3 & analytical tasks only)
 
